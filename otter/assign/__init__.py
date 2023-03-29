@@ -1,6 +1,5 @@
 """Assignment creation tool for Otter-Grader"""
 
-import json
 import os
 import pathlib
 import warnings
@@ -185,34 +184,34 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
 
             LOGGER.info("All autograder tests passed.")
 
-    # find number of manual and autograded questions
-    if assignment.is_python:
-        LOGGER.debug("Finding question information")
+        # find number of manual and autograded questions
+        if assignment.is_python:
+            LOGGER.info("Finding question information")
 
-        with open(f'{assignment.master}', 'r') as notebook:
-            nb_cells = load(notebook)['cells']
+            with open(f'{assignment.master}', 'r') as notebook:
+                nb_cells = load(notebook)['cells']
 
-        questions = {
-            'manual': [0, 0],
-            'auto' : [0, 0]
-        }
+            questions = {
+                'manual': [0, 0],
+                'auto' : [0, 0]
+            }
 
-        for cell in nb_cells:
-            if any('begin question' in entry.lower() for entry in cell['source']): 
-                if any('manual' in entry.lower() and 'true' in entry.lower() for entry in cell['source']): 
-                    type = 'manual'
+            for cell in nb_cells:
+                if any('begin question' in entry.lower() for entry in cell['source']): 
+                    if any('manual' in entry.lower() and 'true' in entry.lower() for entry in cell['source']): 
+                        type = 'manual'
+                    else:
+                        type = 'auto'
                 else:
-                    type = 'auto'
-            else:
-                continue
-            
-            questions[type][0] += 1
-            
-            for entry in cell['source']:
-                if 'points' in entry.lower():
-                    questions[type][1] += int(entry.split(':')[1].strip())
-                    break
+                    continue
+                
+                questions[type][0] += 1
+                
+                for entry in cell['source']:
+                    if 'points' in entry.lower():
+                        questions[type][1] += int(entry.split(':')[1].strip())
+                        break
 
-        LOGGER.debug(f"{questions['manual'][0]} manual questions, {questions['manual'][1]} points total")
-        LOGGER.debug(f"{questions['auto'][0]} autograded questions, {questions['auto'][1]} points total")
+            LOGGER.info(f"{questions['manual'][0]} manual questions, {questions['manual'][1]} points total")
+            LOGGER.info(f"{questions['auto'][0]} autograded questions, {questions['auto'][1]} points total")
 
