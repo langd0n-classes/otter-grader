@@ -1,12 +1,13 @@
 """Assignment creation tool for Otter-Grader"""
 
 import os
+import json
 import pathlib
 import warnings
-
-from json import load
+import nbformat
 
 from .assignment import Assignment
+from .blocks import get_cell_config
 from .output import write_output_directories
 from .utils import run_tests, write_otter_config_file, run_generate_autograder
 
@@ -183,34 +184,37 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
             )
 
             LOGGER.info("All autograder tests passed.")
-
+        
+        # TODO:
+        # - Find possible replacement for reading the notebook
+        
         # find number of manual and autograded questions
         if assignment.is_python:
             LOGGER.info("Finding question information")
 
-            with open(f'{assignment.master}', 'r') as notebook:
-                nb_cells = load(notebook)['cells']
+            file = nbformat.read(master.name, as_version=4)
 
+            # number of questions, total points
             questions = {
                 'manual': [0, 0],
                 'auto' : [0, 0]
             }
-
-            for cell in nb_cells:
-                if any('begin question' in entry.lower() for entry in cell['source']): 
-                    if any('manual' in entry.lower() and 'true' in entry.lower() for entry in cell['source']): 
-                        type = 'manual'
-                    else:
-                        type = 'auto'
-                else:
+            
+            for cell in file.cells:
+                if cell['cell_type'] != 'raw' or '# BEGIN QUESTION' not in cell['source'].upper():
                     continue
+                
+                cell_config = get_cell_config(cell)
+                            
+                if 'manual' in cell_config:
+                    type = 'manual' if cell_config['manual'] else 'auto'
+                else:
+                    type = 'auto'
                 
                 questions[type][0] += 1
                 
-                for entry in cell['source']:
-                    if 'points' in entry.lower():
-                        questions[type][1] += int(entry.split(':')[1].strip())
-                        break
+                if 'points' in cell_config:
+                    questions[type][1] += int(cell_config['points'])
 
             LOGGER.info(f"{questions['manual'][0]} manual questions, {questions['manual'][1]} points total")
             LOGGER.info(f"{questions['auto'][0]} autograded questions, {questions['auto'][1]} points total")
