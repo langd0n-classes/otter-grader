@@ -13,7 +13,7 @@ from .utils import run_tests, write_otter_config_file, run_generate_autograder
 
 from ..export import export_notebook, WkhtmltopdfNotFoundError
 from ..plugins import PluginCollection
-from ..utils import chdir, get_relpath, knit_rmd_file, loggers
+from ..utils import chdir, get_relpath, knit_rmd_file, loggers, NBFORMAT_VERSION
 
 
 LOGGER = loggers.get_logger(__name__)
@@ -192,15 +192,21 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
         if assignment.is_python:
             LOGGER.info("Finding question information")
 
-            file = nbformat.read(master.name, as_version=4)
+            nb = nbformat.read(master.name, as_version=NBFORMAT_VERSION)
 
             # number of questions, total points
             questions = {
-                'manual': [0, 0],
-                'auto' : [0, 0]
+                'manual': {
+                    'num': 0,
+                    'points': 0,
+                },
+                'auto' : {
+                    'num': 0,
+                    'points': 0,
+                }
             }
             
-            for cell in file.cells:
+            for cell in nb.cells:
                 if cell['cell_type'] != 'raw' or '# BEGIN QUESTION' not in cell['source'].upper():
                     continue
                 
@@ -211,11 +217,11 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
                 else:
                     type = 'auto'
                 
-                questions[type][0] += 1
+                questions[type]['num'] += 1
                 
                 if 'points' in cell_config:
-                    questions[type][1] += int(cell_config['points'])
+                    questions[type]['points'] += int(cell_config['points'])
 
-            LOGGER.info(f"{questions['manual'][0]} manual questions, {questions['manual'][1]} points total")
-            LOGGER.info(f"{questions['auto'][0]} autograded questions, {questions['auto'][1]} points total")
+            LOGGER.info(f"{questions['manual']['num']} manual questions, {questions['manual']['points']} points total")
+            LOGGER.info(f"{questions['auto']['num']} autograded questions, {questions['auto']['points']} points total")
 
