@@ -185,9 +185,6 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
 
             LOGGER.info("All autograder tests passed.")
         
-        # TODO:
-        # - Find possible replacement for reading the notebook
-        
         # find number of manual and autograded questions
         if assignment.is_python:
             LOGGER.info("Finding question information")
