@@ -1,7 +1,6 @@
 """Assignment creation tool for Otter-Grader"""
 
 import os
-import json
 import pathlib
 import warnings
 import nbformat
