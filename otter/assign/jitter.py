@@ -5,7 +5,15 @@ from numpy.random import choice
 
 
 class Jitter:
-    """"""
+    """
+    A class for jittering a notebook.
+    
+    Searches for all instances of ``<<int, int[, int]>>`` in markdown cells and 
+    replaces them with a random value as specified by the range.
+    
+    Args:
+        notebook (``nbformat.NotebookNode``): the notebook to be jittered
+    """
     def __init__(self, notebook):
         self.notebook = notebook
         self.values = []
