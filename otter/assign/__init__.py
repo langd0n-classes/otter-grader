@@ -3,16 +3,14 @@
 import os
 import pathlib
 import warnings
-import nbformat
 
 from .assignment import Assignment
-from .blocks import get_cell_config
 from .output import write_output_directories
 from .utils import run_tests, write_otter_config_file, run_generate_autograder
 
 from ..export import export_notebook, WkhtmltopdfNotFoundError
 from ..plugins import PluginCollection
-from ..utils import chdir, get_relpath, knit_rmd_file, loggers, NBFORMAT_VERSION
+from ..utils import chdir, get_relpath, knit_rmd_file, loggers
 
 
 LOGGER = loggers.get_logger(__name__)
@@ -183,39 +181,3 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
             )
 
             LOGGER.info("All autograder tests passed.")
-
-        # find number of manual and autograded questions
-        if assignment.is_python:
-            LOGGER.info("Finding question information")
-
-            nb = nbformat.read(master.name, as_version=NBFORMAT_VERSION)
-
-            # number of questions, total points
-            questions = {
-                'manual': {
-                    'num': 0,
-                    'points': 0,
-                },
-                'autograder' : {
-                    'num': 0,
-                    'points': 0,
-                }
-            }
-
-            for cell in nb.cells:
-                if cell['cell_type'] != 'raw' or '# BEGIN QUESTION' not in cell['source'].upper():
-                    continue
-
-                cell_config = get_cell_config(cell)
-
-                grading = 'autograder'
-                if 'manual' in cell_config:
-                    grading = 'manual' if cell_config['manual'] else 'autograder'
-
-                questions[grading]['num'] += 1
-
-                if 'points' in cell_config:
-                    questions[grading]['points'] += int(cell_config['points'])
-
-            for gtype in questions:
-                LOGGER.info(f"{questions[gtype]['num']} {gtype} questions, {questions[gtype]['points']} points total")
