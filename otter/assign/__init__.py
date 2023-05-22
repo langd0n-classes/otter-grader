@@ -1,17 +1,18 @@
 """Assignment creation tool for Otter-Grader"""
 
-import json
 import os
 import pathlib
 import warnings
+import nbformat
 
 from .assignment import Assignment
+from .blocks import get_cell_config
 from .output import write_output_directories
 from .utils import run_tests, write_otter_config_file, run_generate_autograder
 
 from ..export import export_notebook, WkhtmltopdfNotFoundError
 from ..plugins import PluginCollection
-from ..utils import chdir, get_relpath, knit_rmd_file, loggers
+from ..utils import chdir, get_relpath, knit_rmd_file, loggers, NBFORMAT_VERSION
 
 
 LOGGER = loggers.get_logger(__name__)
