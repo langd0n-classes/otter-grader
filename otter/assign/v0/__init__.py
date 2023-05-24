@@ -6,7 +6,11 @@ import json
 import os
 import pathlib
 import warnings
+import re
 
+from nbformat import read
+
+from .constants import NB_VERSION
 from .assignment import Assignment
 from .utils import run_tests, write_otter_config_file, run_generate_autograder
 
@@ -146,6 +150,51 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
 
             run_tests(result / 'autograder' / master.name, debug=debug, seed=seed, plugin_collection=test_pc)
             print("All tests passed!")
+
+        # find number of manual and autograded questions
+        if assignment.is_python:
+            print("Finding question information")
+
+            nb = read(master.name, as_version=NB_VERSION)
+
+            # number of questions, total points
+            questions = {
+                'manual': {
+                    'num': 0,
+                    'points': 0.0,
+                },
+                'autograder' : {
+                    'num': 0,
+                    'points': 0.0,
+                }
+            }
+
+            for cell in nb.cells:
+                if cell['cell_type'] not in ['raw', 'markdown'] or \
+                    'BEGIN QUESTION' not in cell['source'].upper():
+                    continue
+                
+                temp_cell = cell['source'].split('\n')
+                
+                grading = 'autograder'
+
+                if any(['manual' in i.lower() and 'true' in i.lower() for i in temp_cell]):
+                    grading = 'manual'
+
+                questions[grading]['num'] += 1
+
+                for i in temp_cell:
+                    if 'points' in i.lower():
+                        temp = re.search(r"\d+((.|,)\d+)?", i)
+                        if temp is not None:
+                            points = temp.group(0)
+                        else:
+                            points = 0
+
+                        questions[grading]['points'] += float(points)
+
+            for gtype in questions.items():
+                print(f"{gtype[1]['num']} {gtype[0]} questions, {gtype[1]['points']} points total")
 
     # for tests
     except:

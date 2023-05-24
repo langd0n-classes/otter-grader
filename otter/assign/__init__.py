@@ -194,16 +194,18 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
             questions = {
                 'manual': {
                     'num': 0,
-                    'points': 0,
+                    'points': 0.0,
                 },
                 'autograder' : {
                     'num': 0,
-                    'points': 0,
+                    'points': 0.0,
                 }
             }
 
             for cell in nb.cells:
-                if cell['cell_type'] != 'raw' or '# BEGIN QUESTION' not in cell['source'].upper():
+                if cell['cell_type'] not in ['raw', 'markdown'] or \
+                    'BEGIN QUESTION' not in cell['source'].upper():
+
                     continue
 
                 cell_config = get_cell_config(cell)
@@ -215,7 +217,7 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
                 questions[grading]['num'] += 1
 
                 if 'points' in cell_config:
-                    questions[grading]['points'] += int(cell_config['points'])
+                    questions[grading]['points'] += float(cell_config['points'])
 
             for gtype in questions:
                 LOGGER.info(f"{questions[gtype]['num']} {gtype} questions, {questions[gtype]['points']} points total")
