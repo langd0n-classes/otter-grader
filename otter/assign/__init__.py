@@ -5,6 +5,7 @@ import pathlib
 import warnings
 import nbformat
 
+from .jitter import Jitter
 from .assignment import Assignment
 from .blocks import get_cell_config
 from .output import write_output_directories
@@ -18,7 +19,7 @@ from ..utils import chdir, get_relpath, knit_rmd_file, loggers, NBFORMAT_VERSION
 LOGGER = loggers.get_logger(__name__)
 
 
-def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, password=None, 
+def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, password=None,
          debug=False, v0=False):
     """
     Runs Otter Assign on a master notebook.
@@ -46,6 +47,12 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
     LOGGER.debug(f"User-specified master path: {master}")
     LOGGER.debug(f"User-specified result path: {result}")
     master, result = pathlib.Path(os.path.abspath(master)), pathlib.Path(os.path.abspath(result))
+
+    # TODO: change this jank solution
+    temp_nb = Jitter(nbformat.read(master, as_version=NBFORMAT_VERSION)).jitter()
+    nbformat.write(temp_nb, f"{master.parent}/jitter_master.ipynb")
+
+    master = pathlib.Path(os.path.abspath(f"{master.parent}/jitter_master.ipynb"))
 
     assignment = Assignment()
 
