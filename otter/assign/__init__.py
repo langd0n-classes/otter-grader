@@ -4,8 +4,9 @@ import os
 import pathlib
 import warnings
 import nbformat
+import pickle
 
-from .jitter import Jitter
+from .jitter import version_handler, Jitter
 from .assignment import Assignment
 from .blocks import get_cell_config
 from .output import write_output_directories
@@ -41,18 +42,24 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
             FutureWarning)
 
         from .v0 import main as v0_main
-        return v0_main(master, result, no_pdfs=no_pdfs, no_run_tests=no_run_tests, username=username, 
+        return v0_main(master, result, no_pdfs=no_pdfs, no_run_tests=no_run_tests, username=username,
             password=password, debug=debug)
 
     LOGGER.debug(f"User-specified master path: {master}")
     LOGGER.debug(f"User-specified result path: {result}")
     master, result = pathlib.Path(os.path.abspath(master)), pathlib.Path(os.path.abspath(result))
 
-    # TODO: change this jank solution
-    temp_nb = Jitter(nbformat.read(master, as_version=NBFORMAT_VERSION)).jitter()
-    nbformat.write(temp_nb, f"{master.parent}/jitter_master.ipynb")
+    # TODO: clean this up
+    ver = 2
+    jitter = Jitter(master, ver)
 
-    master = pathlib.Path(os.path.abspath(f"{master.parent}/jitter_master.ipynb"))
+    with open(f'{master.parent}/jv.pkl', 'wb') as f:
+        pickle.dump(jitter.jitter_values, f)
+    
+    real_master = master
+    nbformat.write(jitter.clean_nb, f"{master.parent}/jmaster.ipynb")
+    master = pathlib.Path(os.path.abspath(f"{master.parent}/jmaster.ipynb"))
+
 
     assignment = Assignment()
 
@@ -134,7 +141,7 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
 
                 knit_rmd_file(src, dst)
 
-        # generate a tempalte PDF for Gradescope
+        # generate a template PDF for Gradescope
         if assignment.template_pdf and not no_pdfs:
             LOGGER.info("Generating template PDF")
 
@@ -190,39 +197,12 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
             )
 
             LOGGER.info("All autograder tests passed.")
+    
+    os.rename(f"{result}/autograder/jmaster.ipynb", f"{result}/autograder/{real_master.name}")
+    
+    jitter.assigned_nb = nbformat.read(f"{result}/student/jmaster.ipynb", as_version=4)
+    os.remove(f"{result}/student/jmaster.ipynb")
 
-        # find number of manual and autograded questions
-        if assignment.is_python:
-            LOGGER.info("Finding question information")
-
-            nb = nbformat.read(master.name, as_version=NBFORMAT_VERSION)
-
-            # number of questions, total points
-            questions = {
-                'manual': {
-                    'num': 0,
-                    'points': 0,
-                },
-                'autograder' : {
-                    'num': 0,
-                    'points': 0,
-                }
-            }
-
-            for cell in nb.cells:
-                if cell['cell_type'] != 'raw' or '# BEGIN QUESTION' not in cell['source'].upper():
-                    continue
-
-                cell_config = get_cell_config(cell)
-
-                grading = 'autograder'
-                if 'manual' in cell_config:
-                    grading = 'manual' if cell_config['manual'] else 'autograder'
-
-                questions[grading]['num'] += 1
-
-                if 'points' in cell_config:
-                    questions[grading]['points'] += int(cell_config['points'])
-
-            for gtype in questions:
-                LOGGER.info(f"{questions[gtype]['num']} {gtype} questions, {questions[gtype]['points']} points total")
+    for i in range(ver):
+        nbformat.write(jitter.full_modify(i), f'{result}/student/{str(real_master.name).split(".", maxsplit=1)[0]}_v{i}.ipynb')
+        

@@ -1,88 +1,149 @@
-"""Jitter for questions in Otter Assign"""
-
+import os
+import pathlib
 import re
 
-from nbformat.notebooknode import NotebookNode
+import nbformat
 from numpy import arange
 from numpy.random import choice
 
-
-
 class Jitter:
-    """Jitter for questions in Otter Assign"""
-    def __init__(self, notebook):
-        self.notebook = notebook
-        self.has_jitter = False
-        self.values = {}
-        self.question_name = ''
-        self.question_values = []
+    """Jitter class that takes in a master notebook and the number of versions"""
+    def __init__(self, path: pathlib.Path, versions: int = 1):
+        self.path = path
+        self.versions = versions
+        self.ranges, self.clean_nb = self._get_ranges()
+        self.jitter_values = self._generate()
+        self.assigned_nb = None
 
 
-    def value_from_range(self, matches) -> list:
-        """ Takes an iterator of match objects and returns a list of lists of integers for range()
-        """
+    def _get_ranges(self):
+        """ Finds the values to be jittered and stores the
+            cleaned notebook and values in the object"""
 
-        # becomes [['num', 'num', 'num'], ...]
-        str_range = [re.sub(r'\(\(|\)\)', '', x.group()).split(',') for x in matches]
-
-        # becomes [[float, float, float], ...]
-        input_range = [[float(x) for x in cleaned_match] for cleaned_match in str_range]
-
-        # choose a random value from each range, numpy to allow floats
-        random_nums = [choice(arange(*set_of_values)) for set_of_values in input_range]
-
-        for idx, val in enumerate(random_nums):
-            if int(val) == val:
-                random_nums[idx] = int(val)
-
-        return random_nums
-
-
-    def jitter(self) -> NotebookNode:
-        """Jitters the notebook"""
+        notebook = nbformat.read(self.path, as_version=4)
 
         regex = r'\(\(\d+?,([\s])?\d+?([\,]([\s])?\d+?(.\d+?)?)?\)\)'
-        short_regex = r'\(\(\d+?\)\)'
 
-        for i, cell in enumerate(self.notebook['cells']):
+        ranges = {}
+        question_name = ''
+        has_jitter = False
+
+        for idx, cell in enumerate(notebook['cells']):
+            if '# ASSIGNMENT CONFIG' in cell.source:
+                mod_cell = cell.source.split('\n')
+                
+                if not any('files' in line for line in mod_cell):
+                    mod_cell.append('files:')
+                
+                if not any('- jv.pkl' in line for line in mod_cell):
+                    for i, line in enumerate(mod_cell):
+                        if 'files' in line:
+                            mod_cell.insert(i+1, ' ' * 4 + '- jv.pkl')
+                            break
+                
+                notebook.cells[idx].source = '\n'.join(mod_cell)
+            
             if '# BEGIN QUESTION' in cell['source'].upper():
-                self.question_name = [line.split(':')[1] for line in cell['source'].split('\n') \
-                    if 'name' in line.lower()][0]
+                question_name = [line.split(':')[1] for line in cell['source'].split('\n') \
+                    if 'name' in line.lower()][0].strip()
+                ranges[question_name] = []
 
                 if 'jitter' in cell['source'].lower():
-                    self.has_jitter = [line.split(':')[1] for line in cell['source'].split('\n') \
+                    has_jitter = [line.split(':')[1] for line in cell['source'].split('\n') \
                         if 'jitter' in line.lower()][0].strip().lower() == 'true'
 
-                self.values[self.question_name] = []
-
-            elif '# END QUESTION' in cell['source'].upper() or not self.has_jitter:
+            elif '# END QUESTION' in cell['source'].upper() or not has_jitter:
                 # reset to default values when current question ends
-                self.question_name = ''
-                self.has_jitter = False
+                question_name = ''
+                has_jitter = False
                 continue
 
-            if bool(re.search(regex, cell['source'])):
+            if has_jitter:
+                if bool(re.search(regex, cell['source'])):
+                    local_ranges, length = self._clean(re.finditer(regex, cell['source']))
+                    ranges[question_name].extend(local_ranges)
+
+                    for jitter_num in range(length):
+                        notebook['cells'][idx]['source'] = re.sub(regex, \
+                            f'(({jitter_num}))', cell['source'], 1)
+
+
+        return ranges, notebook
+
+    def _clean(self, match) -> tuple:
+        """Cleans the regex matches and returns the ranges and length"""
+
+        tmp = [re.sub(r'\(\(|\)\)', '', x.group()).split(',') for x in match]
+        return ([[float(x) for x in y] for y in tmp], len(tmp))
+
+    def _generate(self):
+        jitter_values = {}
+
+        for ver in range(self.versions):
+            jitter_values[ver] = {}
+
+            for question in self.ranges:
+                jitter_values[ver][question] = []
+                
+                for i in self.ranges[question]:
+                    tmp = choice(arange(*i))
+                    
+                    # if the value is an integer, cast it to an int
+                    if int(tmp) == tmp:
+                        jitter_values[ver][question].append(int(tmp))
+                        continue
+                    
+                    jitter_values[ver][question].append(tmp)
+
+
+        return jitter_values
+
+    def full_modify(self, cur_ver: int):
+        """stuff"""
+        full_regex = r'\(\(\d+?,([\s])?\d+?([\,]([\s])?\d+?(.\d+?)?)?\)\)'
+        regex = r'\(\(\d+?\)\)'
+        question_name = ''
+
+        new_notebook = self.assigned_nb
+
+        for idx, cell in enumerate(new_notebook['cells']):
+            if 'ver =' in cell['source']:
+                tmp = cell['source'].split('\n')
+                
+                for i, line in enumerate(tmp):
+                    if 'ver = ' in line:
+                        tmp[i] = tmp[i].replace('0', str(cur_ver))
+                        new_notebook['cells'][idx]['source'] = '\n'.join(tmp)
+                        break
+            
+            
+            if 'question' in cell['source'].lower():
+                question_name = 'q' + re.search(r'Question\s(\d+)', cell['source']).group(1)
+
+            while bool(re.search(regex, cell['source'])):
                 all_match = re.finditer(regex, cell['source'])
-                local_values = self.value_from_range(all_match)
-                full_len = len(local_values)
 
-                self.values[self.question_name].extend(local_values)
+                for match in all_match:
+                    new_notebook['cells'][idx]['source'] = re.sub(regex, \
+                        str(self.jitter_values[cur_ver][question_name][int(match.group()[2:-2])]), \
+                            cell['source'], 1)
+        return new_notebook
 
-                while local_values:
-                    self.notebook['cells'][i]['source'] = re.sub(regex, \
-                        f'(({full_len - len(local_values)}))', cell['source'], 1)
+def version_handler(nb_path, versions: int = 1):
+    """ Handles and creates the multiple versions of the notebook"""
+    ver_folder = pathlib.Path(f'{nb_path.parent}/versions')
+    ver_folder.mkdir(parents=True, exist_ok=True)
 
-                    local_values.pop(0)
+    jitter = Jitter(nb_path, versions)
 
-            if bool(re.search(short_regex, cell['source'])):
-                while bool(re.search(short_regex, cell['source'])):
-                    all_match = re.finditer(short_regex, cell['source'])
+    for i in range(versions):
+        nbformat.write(jitter.full_modify(i), \
+            f'{ver_folder}/{str(nb_path.name).split(".", maxsplit=1)[0]}_v{i}.ipynb')
 
-                    for match in all_match:
-                        self.notebook['cells'][i]['source'] = re.sub(short_regex, \
-                            str(self.values[self.question_name][int(match.group()[2:-2])]), \
-                                cell['source'], 1)
+    return jitter.jitter_values
 
 
-        return self.notebook
-  
+if __name__ == '__main__':
+    master = pathlib.Path(os.path.abspath('jitter/jitter_base_assignment.ipynb'))
+
+    print(version_handler(master))
