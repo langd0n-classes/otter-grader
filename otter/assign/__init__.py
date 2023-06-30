@@ -6,9 +6,8 @@ import warnings
 import nbformat
 import pickle
 
-from .jitter import version_handler, Jitter
+from .jitter import Jitter
 from .assignment import Assignment
-from .blocks import get_cell_config
 from .output import write_output_directories
 from .utils import run_tests, write_otter_config_file, run_generate_autograder
 
@@ -21,7 +20,7 @@ LOGGER = loggers.get_logger(__name__)
 
 
 def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, password=None,
-         debug=False, v0=False):
+         debug=False, v0=False, jitter=0):
     """
     Runs Otter Assign on a master notebook.
 
@@ -35,6 +34,7 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
         password (``str``): a password for Gradescope for generating a token
         debug (``bool``): whether to run in debug mode (without ignoring errors during testing)
         v0 (``bool``): whether to use Otter Assign Format v0 instead of v1
+        jitter (``int``): number of versions to generate
     """
     if v0:
         warnings.warn(
@@ -50,15 +50,15 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
     master, result = pathlib.Path(os.path.abspath(master)), pathlib.Path(os.path.abspath(result))
 
     # TODO: clean this up
-    ver = 2
-    jitter = Jitter(master, ver)
+    if jitter:
+        jitter_obj = Jitter(master, jitter)
 
-    with open(f'{master.parent}/jv.pkl', 'wb') as f:
-        pickle.dump(jitter.jitter_values, f)
-    
-    real_master = master
-    nbformat.write(jitter.clean_nb, f"{master.parent}/jmaster.ipynb")
-    master = pathlib.Path(os.path.abspath(f"{master.parent}/jmaster.ipynb"))
+        with open(f'{master.parent}/jv.pkl', 'wb') as f:
+            pickle.dump(jitter_obj.jitter_values, f)
+
+        real_master: pathlib.Path = master
+        nbformat.write(jitter_obj.clean_nb, f"{master.parent}/jmaster.ipynb")
+        master = pathlib.Path(os.path.abspath(f"{master.parent}/jmaster.ipynb"))
 
 
     assignment = Assignment()
@@ -197,12 +197,17 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
             )
 
             LOGGER.info("All autograder tests passed.")
-    
-    os.rename(f"{result}/autograder/jmaster.ipynb", f"{result}/autograder/{real_master.name}")
-    
-    jitter.assigned_nb = nbformat.read(f"{result}/student/jmaster.ipynb", as_version=4)
-    os.remove(f"{result}/student/jmaster.ipynb")
+            
+    if jitter:
+        os.remove(pathlib.Path(os.path.abspath(f"{master.parent}/jmaster.ipynb")))
+        os.remove(pathlib.Path(os.path.abspath(f"{master.parent}/jv.pkl")))
+        
+        # jmaster.ipynb is the temporary notebook used for processing Jitter
+        os.rename(f"{result}/autograder/jmaster.ipynb", f"{result}/autograder/{real_master.name}")
+        
+        jitter_obj.assigned_nb = nbformat.read(f"{result}/student/jmaster.ipynb", as_version=4)
+        os.remove(f"{result}/student/jmaster.ipynb")
 
-    for i in range(ver):
-        nbformat.write(jitter.full_modify(i), f'{result}/student/{str(real_master.name).split(".", maxsplit=1)[0]}_v{i}.ipynb')
+        for i in range(jitter):
+            nbformat.write(jitter_obj.full_modify(i), f'{result}/student/{str(real_master.name).split(".", maxsplit=1)[0]}_v{i}.ipynb')
         
