@@ -3,8 +3,9 @@
 import os
 import pathlib
 import warnings
-import nbformat
-import pickle
+
+from pickle import dump
+from nbformat import write, read
 
 from .jitter import Jitter
 from .assignment import Assignment
@@ -49,15 +50,17 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
     LOGGER.debug(f"User-specified result path: {result}")
     master, result = pathlib.Path(os.path.abspath(master)), pathlib.Path(os.path.abspath(result))
 
-    # TODO: clean this up
     if jitter:
         jitter_obj = Jitter(master, jitter)
 
-        with open(f'{master.parent}/jv.pkl', 'wb') as f:
-            pickle.dump(jitter_obj.jitter_values, f)
+        # create and store jitter values
+        with open(f'{master.parent}/jv.pkl', 'w+b') as jitter_file:
+            dump(jitter_obj.jitter_values, jitter_file)
 
-        real_master: pathlib.Path = master
-        nbformat.write(jitter_obj.clean_nb, f"{master.parent}/jmaster.ipynb")
+        master_name = master.name
+
+        # substitute true master notebook with jittered master notebook
+        write(jitter_obj.clean_nb, f"{master.parent}/jmaster.ipynb")
         master = pathlib.Path(os.path.abspath(f"{master.parent}/jmaster.ipynb"))
 
 
@@ -197,17 +200,18 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
             )
 
             LOGGER.info("All autograder tests passed.")
-            
+
     if jitter:
         os.remove(pathlib.Path(os.path.abspath(f"{master.parent}/jmaster.ipynb")))
         os.remove(pathlib.Path(os.path.abspath(f"{master.parent}/jv.pkl")))
-        
+
         # jmaster.ipynb is the temporary notebook used for processing Jitter
-        os.rename(f"{result}/autograder/jmaster.ipynb", f"{result}/autograder/{real_master.name}")
-        
-        jitter_obj.assigned_nb = nbformat.read(f"{result}/student/jmaster.ipynb", as_version=4)
+        os.rename(f"{result}/autograder/jmaster.ipynb", f"{result}/autograder/{master_name}")
+
+        jitter_obj.assigned_nb = read(f"{result}/student/jmaster.ipynb", as_version=4)
         os.remove(f"{result}/student/jmaster.ipynb")
 
         for i in range(jitter):
-            nbformat.write(jitter_obj.full_modify(i), f'{result}/student/{str(real_master.name).split(".", maxsplit=1)[0]}_v{i}.ipynb')
+            write(jitter_obj.full_modify(i), \
+                f'{result}/student/{str(master_name).split(".", maxsplit=1)[0]}_v{i}.ipynb')
         

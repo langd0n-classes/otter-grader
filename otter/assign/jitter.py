@@ -1,11 +1,11 @@
 import pathlib
 import re
 
-from nbformat.notebooknode import NotebookNode
-
 import nbformat
+from nbformat.notebooknode import NotebookNode
 from numpy import arange
 from numpy.random import choice
+
 
 class Jitter:
     """Jitter class that takes in a master notebook and the number of versions"""
@@ -17,31 +17,51 @@ class Jitter:
             r'\(\((\d+?)\)\)'
         ]
 
-        self.ranges, self.clean_nb = self._get_ranges()
+        self.ranges, self.clean_nb = self._initialize()
         self.jitter_values = self._generate()
         self.assigned_nb: NotebookNode
 
 
-    def _get_ranges(self):
-        """ Finds the values to be jittered and stores the
-            cleaned notebook and values in the object"""
+    def _initialize(self):
+        """Finds jitter ranges and formats the notebook"""
 
         notebook = nbformat.read(self.path, as_version=4)
 
         ranges = {}
         question_counter = 0
-        jtag_location = []
-        
+        jtag_location = [] # tag location for question number
+
         in_tests = False
-        jv_and_ver = [False, False]
+        jv_and_ver = [False, False] # check for jitter required cell
 
         for idx, cell in enumerate(notebook['cells']):
+            if '# ASSIGNMENT CONFIG' in cell['source'].upper():
+                temp_cell = cell['source'].split('\n')
+                files, jvpkl = (False, False)
+                for id, line in enumerate(temp_cell):
+                    if 'files:' == line[:6]:
+                        files = id
+                    if 'jv.pkl' in line:
+                        jvpkl = True
+
+                if jvpkl and files:
+                    continue
+
+                elif files:
+                    temp_cell.insert(files+1, ' ' * 4 + '- jv.pkl')
+
+                else:
+                    temp_cell.append('files:')
+                    temp_cell.append(' ' * 4 + '- jv.pkl')
+                    
+                notebook['cells'][idx]['source'] = '\n'.join(temp_cell)
+
             if "jv = pickle.load(open('jv.pkl', 'rb'))" in cell['source']:
                 jv_and_ver[0] = True
-            
+
             if "ver =" in cell['source']:
                 jv_and_ver[1] = True
-            
+
             if '# BEGIN QUESTION' in cell['source'].upper():
                 ranges[question_counter] = []
 
@@ -91,6 +111,7 @@ class Jitter:
         return ([[float(x) for x in y] for y in tmp], len(tmp))
 
     def _generate(self):
+        """Generates the jitter values for each question and version"""
         jitter_values = {}
 
         for ver in range(self.versions):
@@ -104,15 +125,14 @@ class Jitter:
                     
                     # if the value is an integer, cast it to an int
                     if int(tmp) == tmp:
-                        jitter_values[ver][question].append(int(tmp))
-                        continue
+                        tmp = int(tmp)
                     
                     jitter_values[ver][question].append(tmp)
 
         return jitter_values
 
     def full_modify(self, ver: int):
-        """stuff"""
+        """Modifies the notebook with the jitter values"""
         question_index = 0
         tag_index = []
 
