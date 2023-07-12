@@ -212,6 +212,6 @@ def main(master, result, *, no_pdfs=False, no_run_tests=False, username=None, pa
         os.remove(f"{result}/student/jmaster.ipynb")
 
         for i in range(jitter):
-            write(jitter_obj.full_modify(i), \
-                f'{result}/student/{str(master_name).split(".", maxsplit=1)[0]}_v{i}.ipynb')
+            name = f'{str(master_name).split(".", maxsplit=1)[0]}_v{i}.ipynb'
+            write(jitter_obj.full_modify(i, name), f'{result}/student/{name}')
         

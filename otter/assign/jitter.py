@@ -131,7 +131,7 @@ class Jitter:
 
         return jitter_values
 
-    def full_modify(self, ver: int):
+    def full_modify(self, ver: int, name: str):
         """Modifies the notebook with the jitter values"""
         question_index = 0
         tag_index = []
@@ -139,6 +139,9 @@ class Jitter:
         new_notebook = self.assigned_nb
 
         for idx, cell in enumerate(new_notebook['cells']):
+            if 'otter.Notebook' in cell['source']:
+                new_notebook['cells'][idx]['source'] = new_notebook['cells'][idx]['source'].replace('otter.Notebook("jmaster.ipynb")', f'otter.Notebook("{name}")', )
+
             if 'ver =' in cell['source']:
                 tmp = cell['source'].split('\n')
 
